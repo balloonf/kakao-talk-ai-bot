@@ -1,19 +1,9 @@
 import asyncio
 import re
-import time
-from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from app.config import DATA_DIR
-
-PENDING_TTL = 600  # 10분
-
-
-@dataclass
-class PendingResult:
-    prev_utterance: str
-    answer: str
 
 
 def _sanitize_id(value: str) -> str:
@@ -83,34 +73,6 @@ async def append_summary(user_id: str, d: date, summary: str) -> None:
         return  # 이미 해당 날짜 요약 존재 — 이중 작성 방지
     entry = f"{date_heading}\n{summary}\n\n"
     await asyncio.to_thread(_append_file, path, entry)
-
-
-async def save_pending(user_id: str, prev_utterance: str, answer: str) -> None:
-    path = DATA_DIR / "pending" / f"{user_id}.txt"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    content = f"{int(time.time())}\n{prev_utterance}\n{answer}"
-    await asyncio.to_thread(_write_file, path, content)
-
-
-async def load_pending(user_id: str) -> PendingResult | None:
-    path = DATA_DIR / "pending" / f"{user_id}.txt"
-    if not path.exists():
-        return None
-    content = await asyncio.to_thread(_read_file, path)
-    lines = content.split("\n", 2)
-    if len(lines) < 3:
-        return None
-    ts, prev_utterance, answer = int(lines[0]), lines[1], lines[2]
-    if time.time() - ts > PENDING_TTL:
-        await asyncio.to_thread(path.unlink)
-        return None
-    return PendingResult(prev_utterance=prev_utterance, answer=answer)
-
-
-async def clear_pending(user_id: str) -> None:
-    path = DATA_DIR / "pending" / f"{user_id}.txt"
-    if path.exists():
-        await asyncio.to_thread(path.unlink)
 
 
 async def get_active_users(d: date) -> list[str]:
