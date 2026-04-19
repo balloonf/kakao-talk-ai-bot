@@ -52,6 +52,27 @@ async def _fetch_answer(conv_context: str) -> str:
 
             # 로딩 완료 후 마지막 답변 추출
             await page.wait_for_timeout(500)
+
+            # 디버그: 실제 DOM 셀렉터 확인
+            debug_info = await page.evaluate('''() => {
+                const candidates = [
+                    ".phase-answer",
+                    ".md-editor-preview",
+                    ".markdown-body",
+                    "[class*='answer']",
+                    "[class*='message']",
+                    "[class*='response']",
+                    "[class*='content']",
+                ];
+                const result = {};
+                for (const sel of candidates) {
+                    const els = document.querySelectorAll(sel);
+                    if (els.length) result[sel] = els.length;
+                }
+                return result;
+            }''')
+            logger.info("DOM 셀렉터 현황: %s", debug_info)
+
             answer = await page.evaluate(f'''() => {{
                 const els = document.querySelectorAll("{ANSWER_SEL}");
                 if (!els.length) return "";
@@ -59,7 +80,7 @@ async def _fetch_answer(conv_context: str) -> str:
                 return (last.innerText || last.textContent || "").trim();
             }}''')
 
-            logger.info("qwen answer extracted: len=%d preview=%r", len(answer), answer[:50])
+            logger.info("qwen answer extracted: len=%d preview=%r", len(answer), answer[:80])
 
             return answer
         finally:
