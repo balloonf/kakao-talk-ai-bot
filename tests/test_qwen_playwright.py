@@ -1,49 +1,30 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 
 @pytest.mark.asyncio
-async def test_ask_saves_pending_on_success(monkeypatch):
-    """Playwright 성공 시 save_pending 호출."""
+async def test_ask_returns_answer_on_success(monkeypatch):
+    """Playwright 성공 시 응답 문자열 직접 반환."""
     import app.qwen_playwright as qp
-    import app.storage as s
 
     monkeypatch.setattr(qp, "_fetch_answer", AsyncMock(return_value="Qwen 응답"))
 
-    saved = {}
+    result = await qp.ask("테스트 컨텍스트")
 
-    async def capture_save(uid, prev_utterance, answer):
-        saved["uid"] = uid
-        saved["prev_utterance"] = prev_utterance
-        saved["answer"] = answer
-
-    monkeypatch.setattr(s, "save_pending", capture_save)
-
-    await qp.ask("user1", "안녕", "컨텍스트")
-
-    assert saved["uid"] == "user1"
-    assert saved["prev_utterance"] == "안녕"
-    assert saved["answer"] == "Qwen 응답"
+    assert result == "Qwen 응답"
 
 
 @pytest.mark.asyncio
-async def test_ask_saves_error_message_on_exception(monkeypatch):
-    """Playwright 예외 시 오류 메시지를 pending에 저장 (silent drop 없음)."""
+async def test_ask_returns_error_string_on_exception(monkeypatch):
+    """Playwright 예외 시 오류 메시지 문자열 반환 (예외 전파 없음)."""
     import app.qwen_playwright as qp
-    import app.storage as s
 
     monkeypatch.setattr(qp, "_fetch_answer", AsyncMock(side_effect=RuntimeError("네트워크 오류")))
 
-    saved = {}
+    result = await qp.ask("테스트 컨텍스트")
 
-    async def capture_save(uid, prev_utterance, answer):
-        saved["answer"] = answer
-
-    monkeypatch.setattr(s, "save_pending", capture_save)
-
-    await qp.ask("user1", "안녕", "컨텍스트")
-
-    assert "Qwen 응답 실패" in saved["answer"]
+    assert "Qwen 응답 실패" in result
+    assert "RuntimeError" in result
 
 
 @pytest.mark.asyncio

@@ -3,8 +3,6 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-from app import storage
-
 logger = logging.getLogger(__name__)
 
 SESSION_PATH = Path("data/qwen_session/state.json")
@@ -15,20 +13,19 @@ ANSWER_TIMEOUT = 60_000  # ms
 MAX_CONTEXT_CHARS = 4000
 
 
-async def ask(user_id: str, utterance: str, conv_context: str) -> None:
-    """Playwright로 Qwen에 질문하고 결과를 pending 파일에 저장."""
+async def ask(conv_context: str) -> str:
+    """Playwright로 Qwen에 질문하고 응답 문자열을 직접 반환."""
     try:
-        answer = await _fetch_answer(conv_context)
-        await storage.save_pending(user_id, utterance, answer)
+        return await _fetch_answer(conv_context)
     except Exception as e:
         import traceback
         err_type = type(e).__name__
         err_msg = str(e) or "(메시지 없음)"
         logger.error(
-            "qwen_playwright.ask failed for %s: [%s] %s\n%s",
-            user_id, err_type, err_msg, traceback.format_exc()
+            "qwen_playwright.ask failed: [%s] %s\n%s",
+            err_type, err_msg, traceback.format_exc()
         )
-        await storage.save_pending(user_id, utterance, f"(Qwen 응답 실패: [{err_type}] {err_msg})")
+        return f"(Qwen 응답 실패: [{err_type}] {err_msg})"
 
 
 async def _fetch_answer(conv_context: str) -> str:
