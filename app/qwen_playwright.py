@@ -43,10 +43,6 @@ async def _fetch_answer(conv_context: str) -> str:
             if "login" in page.url or "signin" in page.url:
                 raise RuntimeError("Qwen 세션 만료 — python -m app.qwen_init 으로 재로그인 필요")
 
-            # 전송 전 기존 응답 개수 기록
-            before_count = await page.evaluate(f'() => document.querySelectorAll("{ANSWER_SEL}").length')
-            logger.info("before send: %d existing answers", before_count)
-
             textarea = page.locator(TEXTAREA_SEL)
             await textarea.fill(conv_context[:MAX_CONTEXT_CHARS])
             await textarea.press("Enter")
@@ -54,19 +50,13 @@ async def _fetch_answer(conv_context: str) -> str:
             await page.wait_for_selector(LOADING_SEL, state="visible", timeout=10_000)
             await page.wait_for_selector(LOADING_SEL, state="hidden", timeout=ANSWER_TIMEOUT)
 
-            # 새 응답이 DOM에 추가될 때까지 대기 (최대 5초)
-            expected = before_count + 1
-            await page.wait_for_function(
-                f'() => document.querySelectorAll("{ANSWER_SEL}").length >= {expected}',
-                timeout=5_000,
-            )
-            await page.wait_for_timeout(300)
-
+            # 로딩 완료 후 마지막 답변 추출
+            await page.wait_for_timeout(500)
             answer = await page.evaluate(f'''() => {{
                 const els = document.querySelectorAll("{ANSWER_SEL}");
-                if (els.length < {expected}) return "";
-                const target = els[{before_count}];
-                return (target.innerText || target.textContent || "").trim();
+                if (!els.length) return "";
+                const last = els[els.length - 1];
+                return (last.innerText || last.textContent || "").trim();
             }}''')
 
             logger.info("qwen answer extracted: len=%d preview=%r", len(answer), answer[:50])
