@@ -7,7 +7,7 @@ import pytest
 
 # 테스트용 환경변수 — 실제 API 호출 없음
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
-os.environ.setdefault("KAKAO_SECRET_TOKEN", "test-secret")
+os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-bot-token")
 os.environ.setdefault("MODEL", "claude-haiku-4-5-20251001")
 os.environ.setdefault("BOT_NAME", "테스트봇")
 
