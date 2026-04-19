@@ -15,8 +15,16 @@ logger = logging.getLogger(__name__)
 _user_locks: dict[str, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
 
+_SYSTEM_PROMPT = (
+    "당신은 친절하고 유능한 AI 어시스턴트입니다. "
+    "모든 질문에 충분히 상세하고 구체적으로 답변하세요. "
+    "설명이 필요한 경우 예시를 들고, 단계별로 안내하세요. "
+    "짧은 질문이라도 풍부한 정보를 제공하세요."
+)
+
+
 def _build_context(utterance: str, history: str, summary: str, knowledge_chunks: list[str]) -> str:
-    parts = []
+    parts = [f"[시스템]\n{_SYSTEM_PROMPT}"]
     if summary:
         parts.append(f"[이전 대화 요약]\n{summary}")
     if history:
@@ -50,7 +58,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not answer:
             answer = "(응답을 받지 못했습니다. 다시 시도해 주세요.)"
 
-        await update.message.reply_text(answer)
+        # 텔레그램 메시지 최대 4096자 — 초과 시 분할 전송
+        MAX_LEN = 4096
+        for i in range(0, len(answer), MAX_LEN):
+            await update.message.reply_text(answer[i:i + MAX_LEN])
         await storage.append_message(user_id, utterance, answer)
 
 
