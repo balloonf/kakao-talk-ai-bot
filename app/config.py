@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ANTHROPIC_API_KEY: str = os.environ["ANTHROPIC_API_KEY"]
+ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
 KAKAO_SECRET_TOKEN: str = os.environ["KAKAO_SECRET_TOKEN"]
 MODEL: str = os.getenv("MODEL", "claude-haiku-4-5-20251001")
 BOT_NAME: str = os.getenv("BOT_NAME", "AI 봇")
