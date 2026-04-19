@@ -3,6 +3,8 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
+from app.alerts import send_alert
+
 logger = logging.getLogger(__name__)
 
 SESSION_PATH = Path("data/qwen_session/state.json")
@@ -25,6 +27,7 @@ async def ask(conv_context: str) -> str:
             "qwen_playwright.ask failed: [%s] %s\n%s",
             err_type, err_msg, traceback.format_exc()
         )
+        await send_alert(f"Qwen 오류 발생: [{err_type}] {err_msg}\n\n세션 만료 시: python -m app.qwen_init")
         return f"(Qwen 응답 실패: [{err_type}] {err_msg})"
 
 
