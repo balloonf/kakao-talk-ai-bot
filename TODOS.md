@@ -28,6 +28,19 @@
   - Context: Options: (1) cron job pings `/health` endpoint and alerts on failure, (2) ngrok agent config with `on_disconnect` webhook, (3) simple watchdog script. Simplest: add a `/health` endpoint and check it via external uptime monitor (UptimeRobot free tier).
   - Blocked by: deployment environment decision (Phase 2 cloud migration may make this moot)
 
+## From Eng Review (2026-04-19) — Telegram 전환
+
+- **Playwright 브라우저 세션 재사용**
+  - What: 현재 `_fetch_answer()`는 매 메시지마다 Chromium을 `launch()` → `close()`함. 메시지당 2-4초 브라우저 시작 오버헤드 발생.
+  - Why: 텔레그램은 사용자가 직접 응답을 기다리므로 체감됨. 브라우저 인스턴스를 앱 수명 동안 유지하면 오버헤드 제거 가능.
+  - Pros: 응답 시간 2-4초 단축.
+  - Cons: 브라우저 크래시 시 재시작 로직 필요. 장기 실행 시 메모리 증가.
+  - Context: `async_playwright()` 컨텍스트를 모듈 레벨에서 관리. `_browser` 전역 변수 + 재시작 wrapper 패턴.
+  - Blocked by: 텔레그램 전환 기본 동작 검증 후 최적화
+
+- **ngrok → 클라우드 이전 (Railway/Render) 업데이트**
+  - 텔레그램 Long Polling 전환으로 ngrok 의존성 제거됨. Railway/Render 이전 시에도 Long Polling 그대로 사용 가능. 이전 시 환경변수 TELEGRAM_BOT_TOKEN만 설정하면 됨.
+
 ## From Eng Review (2026-04-19) — Playwright + Qwen
 
 - **Qwen 세션 만료 / Playwright 실패 알림**
