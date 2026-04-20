@@ -5,7 +5,8 @@ import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
-from app import knowledge, storage
+from app import ai, knowledge, storage
+from app.knowledge import load_rules
 from app import qwen_playwright
 from app.config import TELEGRAM_BOT_TOKEN, FALLBACK_MSG, BOT_NAME
 from app.scheduler import create_scheduler, get_scheduler
@@ -15,22 +16,50 @@ logger = logging.getLogger(__name__)
 _user_locks: dict[str, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
 
-_SYSTEM_PROMPT = (
-    "당신은 친절하고 유능한 AI 어시스턴트입니다. "
-    "모든 질문에 충분히 상세하고 구체적으로 답변하세요. "
-    "설명이 필요한 경우 예시를 들고, 단계별로 안내하세요. "
-    "짧은 질문이라도 풍부한 정보를 제공하세요."
-)
+_ERROR_PATTERNS = [
+    "(Qwen 응답 실패",
+    "(응답을 받지 못했습니다",
+    "건너뛰기",
+    "생각이 끝났습니다",
+]
+_MAX_HISTORY_TURNS = 5   # 최근 N개 교환만 포함
+_MAX_HISTORY_CHARS = 1500  # 이 길이 초과 시 자동 요약
 
 
-def _build_context(utterance: str, history: str, summary: str, knowledge_chunks: list[str]) -> str:
-    parts = [f"[시스템]\n{_SYSTEM_PROMPT}"]
+def _extract_user_line(block: str) -> str:
+    """블록에서 사용자 발화 줄만 추출."""
+    for line in block.splitlines():
+        if "사용자" in line and "]: " in line:
+            return line.split("]: ", 1)[-1].strip()
+    return block
+
+
+def _trim_history(history: str) -> str:
+    """오류 응답 제거 + 중복 질문 제거 + 최근 N개 교환만 유지."""
+    if not history:
+        return ""
+    blocks = history.strip().split("\n\n")
+    # 오류 응답이 포함된 블록 제거
+    clean = [b for b in blocks if not any(p in b for p in _ERROR_PATTERNS)]
+    # 중복 질문 제거 — 같은 사용자 발화가 여러 번이면 마지막만 유지
+    seen: dict[str, int] = {}
+    for i, block in enumerate(clean):
+        key = _extract_user_line(block)
+        seen[key] = i  # 마지막 인덱스 덮어쓰기
+    deduped = [clean[i] for i in sorted(seen.values())]
+    # 최근 N개만
+    recent = deduped[-_MAX_HISTORY_TURNS:]
+    return "\n\n".join(recent)
+
+
+def _build_context(utterance: str, knowledge: str, history: str, summary: str) -> str:
+    parts = [f"[시스템]\n{load_rules()}"]
     if summary:
-        parts.append(f"[이전 대화 요약]\n{summary}")
+        parts.append(f"[이전 대화내용 요약]\n{summary}")
     if history:
-        parts.append(f"[오늘 대화]\n{history}")
-    if knowledge_chunks:
-        parts.append(f"[관련 정보]\n" + "\n".join(knowledge_chunks))
+        parts.append(f"[이전 대화내용]\n{history}")
+    if knowledge:
+        parts.append(f"[관련 정보]\n{knowledge}")
     parts.append(f"[사용자 메시지]\n{utterance}")
     return "\n\n".join(parts)
 
@@ -46,12 +75,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
 
     async with _user_locks[user_id]:
-        history, summary, knowledge_chunks = await asyncio.gather(
+        knowledge_str, history, summary = await asyncio.gather(
+            knowledge.search(utterance),
             storage.load_today(user_id),
             storage.load_summary(user_id),
-            knowledge.search(utterance),
         )
-        conv_context = _build_context(utterance, history, summary, knowledge_chunks)
+        trimmed = _trim_history(history)
+        if len(trimmed) > _MAX_HISTORY_CHARS:
+            try:
+                result = await ai.summarize(trimmed)
+                if result and "(요약 실패)" not in result:
+                    trimmed = f"(자동 요약)\n{result}"
+                else:
+                    trimmed = trimmed[-_MAX_HISTORY_CHARS:]
+            except Exception:
+                trimmed = trimmed[-_MAX_HISTORY_CHARS:]
+        conv_context = _build_context(utterance, knowledge_str, trimmed, summary)
 
         answer = await qwen_playwright.ask(conv_context)
 

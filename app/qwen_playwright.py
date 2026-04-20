@@ -4,15 +4,18 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 from app.alerts import send_alert
+from app.config import PLAYWRIGHT_HEADLESS
 
 logger = logging.getLogger(__name__)
 
 SESSION_PATH = Path("data/qwen_session/state.json")
 TEXTAREA_SEL = "textarea.message-input-textarea"
 LOADING_SEL = ".response-loading"
-ANSWER_SEL = ".phase-answer"
-ANSWER_TIMEOUT = 60_000  # ms
-MAX_CONTEXT_CHARS = 4000
+ANSWER_TIMEOUT = 120_000  # ms
+MAX_CONTEXT_CHARS = 8000
+
+# 실제 AI 응답으로 보기 위한 최소 글자 수 (tool-use 설명 텍스트 제외)
+MIN_ANSWER_LEN = 80
 
 
 async def ask(conv_context: str) -> str:
@@ -31,9 +34,36 @@ async def ask(conv_context: str) -> str:
         return f"(Qwen 응답 실패: [{err_type}] {err_msg})"
 
 
+# 마지막 AI 응답 텍스트 추출 (thinking 블록·버튼 등 UI 텍스트 제거)
+_GET_ASSISTANT_TEXT = """() => {
+    const els = document.querySelectorAll(".qwen-chat-message-assistant");
+    if (!els.length) return "";
+    const last = els[els.length - 1];
+    const cloned = last.cloneNode(true);
+    // thinking/reasoning 블록 제거
+    cloned.querySelectorAll(
+        '[class*="think"], [class*="reasoning"], [class*="thought"], details, summary'
+    ).forEach(el => el.remove());
+    // 버튼 제거 (건너뛰기 등)
+    cloned.querySelectorAll('button').forEach(el => el.remove());
+    let text = (cloned.innerText || cloned.textContent || "").trim();
+    return text;
+}"""
+
+
+def _strip_thinking(text: str) -> str:
+    """Qwen thinking 블록 텍스트가 남아있으면 제거."""
+    markers = ["생각이 끝났습니다.", "생각 완료", "</think>"]
+    for marker in markers:
+        idx = text.find(marker)
+        if idx != -1:
+            text = text[idx + len(marker):].strip()
+    return text
+
+
 async def _fetch_answer(conv_context: str) -> str:
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=PLAYWRIGHT_HEADLESS)
         try:
             context = await browser.new_context(storage_state=str(SESSION_PATH))
             page = await context.new_page()
@@ -47,41 +77,41 @@ async def _fetch_answer(conv_context: str) -> str:
             await textarea.fill(conv_context[:MAX_CONTEXT_CHARS])
             await textarea.press("Enter")
 
-            await page.wait_for_selector(LOADING_SEL, state="visible", timeout=10_000)
-            await page.wait_for_selector(LOADING_SEL, state="hidden", timeout=ANSWER_TIMEOUT)
+            # 전송 후 초기 대기
+            await page.wait_for_timeout(2000)
 
-            # 로딩 완료 후 마지막 답변 추출
-            await page.wait_for_timeout(500)
+            # 마지막 AI 응답이 안정될 때까지 폴링 (최대 120초)
+            prev_text = ""
+            stable_count = 0
+            good_answer_since = 0  # MIN_ANSWER_LEN 초과한 이후 경과 틱
+            for _ in range(240):
+                await page.wait_for_timeout(500)
+                current = await page.evaluate(_GET_ASSISTANT_TEXT)
 
-            # 디버그: 실제 DOM 셀렉터 확인
-            debug_info = await page.evaluate('''() => {
-                const candidates = [
-                    ".phase-answer",
-                    ".md-editor-preview",
-                    ".markdown-body",
-                    "[class*='answer']",
-                    "[class*='message']",
-                    "[class*='response']",
-                    "[class*='content']",
-                ];
-                const result = {};
-                for (const sel of candidates) {
-                    const els = document.querySelectorAll(sel);
-                    if (els.length) result[sel] = els.length;
-                }
-                return result;
-            }''')
-            logger.info("DOM 셀렉터 현황: %s", debug_info)
+                # MIN_ANSWER_LEN 미만이면 아직 tool-use 단계 → 계속 대기
+                if len(current) < MIN_ANSWER_LEN:
+                    stable_count = 0
+                    good_answer_since = 0
+                    prev_text = current
+                    continue
 
-            answer = await page.evaluate(f'''() => {{
-                const els = document.querySelectorAll("{ANSWER_SEL}");
-                if (!els.length) return "";
-                const last = els[els.length - 1];
-                return (last.innerText || last.textContent || "").trim();
-            }}''')
+                good_answer_since += 1
 
+                if current == prev_text:
+                    stable_count += 1
+                    if stable_count >= 2:  # 1초 연속 동일 → 완료
+                        break
+                else:
+                    stable_count = 0
+
+                # 충분한 답변이 20초 이상 쌓였으면 강제 반환
+                if good_answer_since >= 40:
+                    break
+
+                prev_text = current
+
+            answer = _strip_thinking(prev_text)
             logger.info("qwen answer extracted: len=%d preview=%r", len(answer), answer[:80])
-
             return answer
         finally:
             await browser.close()

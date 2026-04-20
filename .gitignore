@@ -9,3 +9,4 @@ venv/
 *.egg-info/
 dist/
 build/
+debug_qwen_*.png
