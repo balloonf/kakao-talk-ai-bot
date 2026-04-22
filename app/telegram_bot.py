@@ -7,7 +7,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 
 from app import ai, knowledge, storage
 from app.knowledge import load_rules
-from app import qwen_playwright
+from app import gemini
 from app.config import TELEGRAM_BOT_TOKEN, FALLBACK_MSG, BOT_NAME
 from app.scheduler import create_scheduler, get_scheduler
 
@@ -17,6 +17,7 @@ _user_locks: dict[str, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
 
 _ERROR_PATTERNS = [
+    "(Gemini 응답 실패",
     "(Qwen 응답 실패",
     "(응답을 받지 못했습니다",
     "건너뛰기",
@@ -92,7 +93,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 trimmed = trimmed[-_MAX_HISTORY_CHARS:]
         conv_context = _build_context(utterance, knowledge_str, trimmed, summary)
 
-        answer = await qwen_playwright.ask(conv_context)
+        answer = await gemini.ask(conv_context)
 
         if not answer:
             answer = "(응답을 받지 못했습니다. 다시 시도해 주세요.)"

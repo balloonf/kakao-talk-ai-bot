@@ -13,4 +13,5 @@ TIMEZONE: str = os.getenv("TIMEZONE", "Asia/Seoul")
 DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
 OPERATOR_CHAT_ID: str | None = os.getenv("OPERATOR_CHAT_ID")
 FALLBACK_MSG: str = "잠시 후 다시 시도해 주세요."
-PLAYWRIGHT_HEADLESS: bool = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
+GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")

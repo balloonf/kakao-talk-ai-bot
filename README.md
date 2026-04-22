@@ -1,13 +1,12 @@
 # 텔레그램 AI 자동응답 봇
 
 텔레그램 기반 AI 자동응답 봇.
-ChromaDB RAG + Qwen(Playwright) + 마크다운 대화 저장 + 일일 자동 요약.
+ChromaDB RAG + Gemini API + 마크다운 대화 저장 + 일일 자동 요약.
 
 ## 설치
 
 ```bash
 pip install -r requirements.txt
-playwright install chromium
 cp .env.example .env   # 환경변수 입력
 ```
 
@@ -16,22 +15,13 @@ cp .env.example .env   # 환경변수 입력
 | 변수 | 필수 | 설명 |
 |------|------|------|
 | `TELEGRAM_BOT_TOKEN` | ✅ | @BotFather에서 발급 |
+| `GEMINI_API_KEY` | ✅ | [Google AI Studio](https://aistudio.google.com/apikey)에서 발급 |
 | `OPERATOR_CHAT_ID` | 선택 | 오류 알림 받을 텔레그램 사용자 ID |
 | `BOT_NAME` | 선택 | 봇 이름, 기본값: `AI 봇` |
 | `TIMEZONE` | 선택 | 기본값: `Asia/Seoul` |
 | `DATA_DIR` | 선택 | 데이터 저장 경로, 기본값: `./data` |
-| `PLAYWRIGHT_HEADLESS` | 선택 | `false`로 설정 시 브라우저 화면 표시, 기본값: `true` |
+| `GEMINI_MODEL` | 선택 | 사용 모델, 기본값: `gemini-2.0-flash` |
 | `ANTHROPIC_API_KEY` | 선택 | 대화 요약 기능 사용 시 필요 |
-
-## Qwen 세션 초기화
-
-최초 실행 또는 세션 만료 시 로그인 필요:
-
-```bash
-python -m app.qwen_init
-```
-
-브라우저가 열리면 Qwen에 로그인 후 엔터 입력. 세션이 `data/qwen_session/state.json`에 저장됩니다.
 
 ## 봇 실행
 
@@ -78,8 +68,6 @@ data/
     rules.md                     ← 응답 규칙 (시스템 프롬프트)
     상품정보.md
     배송정책.md
-  qwen_session/
-    state.json                   ← Playwright 로그인 세션
   conversations/
     {user_id}/
       2026-04-20.md              ← 날짜별 대화 마크다운

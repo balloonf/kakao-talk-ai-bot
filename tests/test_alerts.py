@@ -48,22 +48,25 @@ async def test_send_alert_bot_failure_doesnt_raise(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_qwen_ask_sends_alert_on_error(monkeypatch):
-    """Qwen 오류 시 send_alert 호출 확인."""
-    import app.qwen_playwright as qp
+async def test_gemini_ask_sends_alert_on_error(monkeypatch):
+    """Gemini 오류 시 send_alert 호출 확인."""
+    import app.gemini as g
     import app.alerts as alerts
 
-    monkeypatch.setattr(qp, "_fetch_answer", AsyncMock(side_effect=RuntimeError("세션 만료")))
+    def _fail(ctx):
+        raise RuntimeError("API 오류")
+
     alert_called = {}
 
     async def capture_alert(msg):
         alert_called["msg"] = msg
 
+    monkeypatch.setattr(g, "_call_gemini", _fail)
     monkeypatch.setattr(alerts, "send_alert", capture_alert)
-    monkeypatch.setattr(qp, "send_alert", capture_alert)
+    monkeypatch.setattr(g, "send_alert", capture_alert)
 
-    result = await qp.ask("테스트")
+    result = await g.ask("테스트")
 
-    assert "Qwen 응답 실패" in result
+    assert "Gemini 응답 실패" in result
     assert "msg" in alert_called
-    assert "세션 만료" in alert_called["msg"]
+    assert "API 오류" in alert_called["msg"]

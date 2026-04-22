@@ -36,18 +36,18 @@ async def test_handle_message_model_not_ready(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_handle_message_happy_path(monkeypatch):
-    """정상 메시지 처리: Qwen 응답을 텔레그램으로 전송하고 저장."""
+    """정상 메시지 처리: Gemini 응답을 텔레그램으로 전송하고 저장."""
     import app.telegram_bot as tb
     import app.knowledge as k
     import app.storage as s
-    import app.qwen_playwright as qp
+    import app.gemini as g
 
     monkeypatch.setattr(k, "model_ready", True)
     monkeypatch.setattr(k, "search", AsyncMock(return_value=[]))
     monkeypatch.setattr(s, "load_today", AsyncMock(return_value=""))
     monkeypatch.setattr(s, "load_summary", AsyncMock(return_value=""))
     monkeypatch.setattr(s, "append_message", AsyncMock())
-    monkeypatch.setattr(qp, "ask", AsyncMock(return_value="테스트 응답입니다"))
+    monkeypatch.setattr(g, "ask", AsyncMock(return_value="테스트 응답입니다"))
 
     update = _make_update(text="질문", user_id="user1")
     await tb.handle_message(update, _make_context())
@@ -57,19 +57,19 @@ async def test_handle_message_happy_path(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handle_message_empty_qwen_response(monkeypatch):
-    """Qwen이 빈 문자열 반환 시 fallback 메시지 전송."""
+async def test_handle_message_empty_gemini_response(monkeypatch):
+    """Gemini가 빈 문자열 반환 시 fallback 메시지 전송."""
     import app.telegram_bot as tb
     import app.knowledge as k
     import app.storage as s
-    import app.qwen_playwright as qp
+    import app.gemini as g
 
     monkeypatch.setattr(k, "model_ready", True)
     monkeypatch.setattr(k, "search", AsyncMock(return_value=[]))
     monkeypatch.setattr(s, "load_today", AsyncMock(return_value=""))
     monkeypatch.setattr(s, "load_summary", AsyncMock(return_value=""))
     monkeypatch.setattr(s, "append_message", AsyncMock())
-    monkeypatch.setattr(qp, "ask", AsyncMock(return_value=""))
+    monkeypatch.setattr(g, "ask", AsyncMock(return_value=""))
 
     update = _make_update()
     await tb.handle_message(update, _make_context())
@@ -79,33 +79,33 @@ async def test_handle_message_empty_qwen_response(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handle_message_qwen_exception_doesnt_crash(monkeypatch):
-    """qwen_playwright.ask()가 오류 문자열 반환해도 봇이 계속 동작."""
+async def test_handle_message_gemini_error_string(monkeypatch):
+    """gemini.ask()가 오류 문자열 반환해도 봇이 계속 동작."""
     import app.telegram_bot as tb
     import app.knowledge as k
     import app.storage as s
-    import app.qwen_playwright as qp
+    import app.gemini as g
 
     monkeypatch.setattr(k, "model_ready", True)
     monkeypatch.setattr(k, "search", AsyncMock(return_value=[]))
     monkeypatch.setattr(s, "load_today", AsyncMock(return_value=""))
     monkeypatch.setattr(s, "load_summary", AsyncMock(return_value=""))
     monkeypatch.setattr(s, "append_message", AsyncMock())
-    monkeypatch.setattr(qp, "ask", AsyncMock(return_value="(Qwen 응답 실패: [RuntimeError] 오류)"))
+    monkeypatch.setattr(g, "ask", AsyncMock(return_value="(Gemini 응답 실패: [RuntimeError] 오류)"))
 
     update = _make_update()
     await tb.handle_message(update, _make_context())
 
     sent = update.message.reply_text.call_args[0][0]
-    assert "Qwen 응답 실패" in sent
+    assert "Gemini 응답 실패" in sent
 
 
 @pytest.mark.asyncio
-async def test_qwen_ask_new_signature(monkeypatch):
+async def test_gemini_ask_signature(monkeypatch):
     """ask(conv_context) -> str 시그니처 검증."""
-    import app.qwen_playwright as qp
+    import app.gemini as g
 
-    monkeypatch.setattr(qp, "_fetch_answer", AsyncMock(return_value="직접 반환"))
+    monkeypatch.setattr(g, "_call_gemini", lambda ctx: "직접 반환")
 
-    result = await qp.ask("컨텍스트 문자열")
+    result = await g.ask("컨텍스트 문자열")
     assert result == "직접 반환"
