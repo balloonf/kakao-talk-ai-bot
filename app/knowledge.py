@@ -17,6 +17,16 @@ _embed_model: SentenceTransformer | None = None
 
 KNOWLEDGE_DIR = DATA_DIR / "knowledge"
 CHROMA_DIR = DATA_DIR / "chroma"
+RULES_FILE = KNOWLEDGE_DIR / "rules.md"
+
+_DEFAULT_RULES = "당신은 친절하고 유능한 AI 어시스턴트입니다. 질문에 핵심만 간결하게 답변하세요."
+
+
+def load_rules() -> str:
+    """rules.md 에서 응답 규칙을 읽어 반환. 파일 없으면 기본값 사용."""
+    if RULES_FILE.exists():
+        return RULES_FILE.read_text(encoding="utf-8").strip()
+    return _DEFAULT_RULES
 
 
 def init_knowledge() -> None:

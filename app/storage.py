@@ -1,6 +1,6 @@
 import asyncio
 import re
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from app.config import DATA_DIR
